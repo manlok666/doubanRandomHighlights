@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Douban Random Highlights
 
-## Getting Started
+输入豆瓣 ID，读取公开的「想看」电影列表，点击按钮随机抽取一部并展示：
 
-First, run the development server:
+- 海报
+- 简介
+- 豆瓣评分
+- 评分人数
+- 热评
+- 豆瓣详情页链接
+
+## 技术栈
+
+- Next.js 16（App Router）
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Cheerio（服务端解析豆瓣页面）
+
+## 本地运行
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 `http://localhost:3000`。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 构建与检查
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run build
+```
 
-## Learn More
+## 使用说明
 
-To learn more about Next.js, take a look at the following resources:
+1. 在页面输入豆瓣 ID（用户主页 URL 中 `/people/{id}/` 的 `{id}`）
+2. 点击「加载列表」获取该用户公开的想看电影
+3. 点击「开始随机」随机展示一部电影详情
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 注意事项
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 仅能读取公开可访问的想看列表
+- 若豆瓣访问受限或出现反爬策略，接口可能返回失败
+- 数据来自实时抓取，受豆瓣页面结构变化影响
