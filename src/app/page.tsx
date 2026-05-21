@@ -14,6 +14,17 @@ type MovieResponse = MovieDetails & {
   message?: string;
 };
 
+function getSafeImageUrl(url: string) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 function getRandomMovie(movies: WishlistMovie[], currentUrl: string | null) {
   if (movies.length <= 1) return movies[0] ?? null;
   const candidates = movies.filter((movie) => movie.detailUrl !== currentUrl);
@@ -186,10 +197,10 @@ export default function Home() {
             ) : (
               <article className="grid gap-6 sm:grid-cols-[180px_1fr]">
                 <div>
-                  {currentMovie.poster ? (
+                  {getSafeImageUrl(currentMovie.poster) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={currentMovie.poster}
+                      src={getSafeImageUrl(currentMovie.poster)}
                       alt={`${currentMovie.title} 海报`}
                       className="h-[260px] w-full rounded-xl border border-white/10 object-cover"
                     />

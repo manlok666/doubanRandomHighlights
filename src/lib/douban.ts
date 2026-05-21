@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 
 const DOUBAN_HOST = "https://movie.douban.com";
 const PAGE_SIZE = 15;
+const MAX_WISHLIST_PAGES = 80;
 
 export type WishlistMovie = {
   title: string;
@@ -31,7 +32,10 @@ function buildHeaders(referer?: string): HeadersInit {
   };
 }
 
-async function fetchHtml(url: string, referer?: string) {
+async function fetchDoubanHtml(pathnameAndQuery: string, refererPath = "/") {
+  const url = new URL(pathnameAndQuery, DOUBAN_HOST);
+  const referer = new URL(refererPath, DOUBAN_HOST).toString();
+
   const response = await fetch(url, {
     method: "GET",
     headers: buildHeaders(referer),
@@ -47,6 +51,7 @@ async function fetchHtml(url: string, referer?: string) {
 
 function toAbsoluteUrl(url?: string) {
   if (!url) return "";
+  if (url.startsWith("//")) return `https:${url}`;
   if (url.startsWith("http")) return url;
   return `${DOUBAN_HOST}${url}`;
 }
@@ -131,7 +136,20 @@ function parseMovieDetails(html: string, fallbackUrl: string): MovieDetails {
 }
 
 function normalizeUserId(input: string) {
-  return input.trim().replace(/^@+/, "");
+  const userId = input.trim().replace(/^@+/, "");
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(userId)) return "";
+  return userId;
+}
+
+function extractSubjectId(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+
+  const byPath = trimmed.match(/\/subject\/(\d+)(?:\/|$)/);
+  if (byPath?.[1]) return byPath[1];
+
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  return "";
 }
 
 export async function fetchWishlistByUserId(userIdInput: string) {
@@ -143,10 +161,10 @@ export async function fetchWishlistByUserId(userIdInput: string) {
   const allMovies: WishlistMovie[] = [];
   const seen = new Set<string>();
 
-  for (let page = 0; page < 80; page += 1) {
+  for (let page = 0; page < MAX_WISHLIST_PAGES; page += 1) {
     const start = page * PAGE_SIZE;
-    const url = `${DOUBAN_HOST}/people/${encodeURIComponent(userId)}/wish?start=${start}&sort=time&rating=all&filter=all&mode=list`;
-    const html = await fetchHtml(url, `${DOUBAN_HOST}/`);
+    const path = `/people/${encodeURIComponent(userId)}/wish?start=${start}&sort=time&rating=all&filter=all&mode=list`;
+    const html = await fetchDoubanHtml(path);
     const movies = parseWishlistPage(html);
 
     if (movies.length === 0) {
@@ -171,11 +189,13 @@ export async function fetchWishlistByUserId(userIdInput: string) {
 }
 
 export async function fetchMovieDetailsByUrl(inputUrl: string) {
-  const detailUrl = toAbsoluteUrl(inputUrl.trim());
-  if (!detailUrl.includes("movie.douban.com/subject/")) {
+  const subjectId = extractSubjectId(inputUrl);
+  if (!subjectId) {
     throw new Error("无效的电影详情链接");
   }
 
-  const html = await fetchHtml(detailUrl, `${DOUBAN_HOST}/`);
+  const detailPath = `/subject/${subjectId}/`;
+  const detailUrl = toAbsoluteUrl(detailPath);
+  const html = await fetchDoubanHtml(detailPath);
   return parseMovieDetails(html, detailUrl);
 }
