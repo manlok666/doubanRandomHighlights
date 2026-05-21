@@ -48,39 +48,11 @@ export default function Home() {
     return "输入豆瓣 ID 后点击加载列表";
   }, [loadingList, loadingMovie, movies.length]);
 
-  const loadWishlist = async () => {
-    if (!userId.trim()) {
-      setError("请输入豆瓣 ID");
-      return;
-    }
-
-    setLoadingList(true);
-    setError("");
-    setCurrentMovie(null);
-
-    try {
-      const response = await fetch(`/api/wishlist?userId=${encodeURIComponent(userId.trim())}`);
-      const data = (await response.json()) as WishlistResponse;
-
-      if (!response.ok) {
-        throw new Error(data.message ?? "加载想看列表失败");
-      }
-
-      setMovies(data.movies);
-
-      if (data.movies.length === 0) {
-        setError("未找到公开的想看电影，或该用户想看列表不可访问");
-      }
-    } catch (requestError) {
-      setMovies([]);
-      setError(requestError instanceof Error ? requestError.message : "加载失败");
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  const startRandom = async () => {
-    const picked = getRandomMovie(movies, currentMovie?.detailUrl ?? null);
+  const loadRandomMovie = async (
+    movieList: WishlistMovie[],
+    currentUrl: string | null,
+  ) => {
+    const picked = getRandomMovie(movieList, currentUrl);
     if (!picked) {
       setError("暂无可抽取的电影");
       return;
@@ -111,6 +83,44 @@ export default function Home() {
     }
   };
 
+  const loadWishlist = async () => {
+    if (!userId.trim()) {
+      setError("请输入豆瓣 ID");
+      return;
+    }
+
+    setLoadingList(true);
+    setError("");
+    setCurrentMovie(null);
+
+    try {
+      const response = await fetch(`/api/wishlist?userId=${encodeURIComponent(userId.trim())}`);
+      const data = (await response.json()) as WishlistResponse;
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "加载想看列表失败");
+      }
+
+      setMovies(data.movies);
+
+      if (data.movies.length === 0) {
+        setError("未找到公开的想看电影，或该用户想看列表不可访问");
+        return;
+      }
+
+      await loadRandomMovie(data.movies, null);
+    } catch (requestError) {
+      setMovies([]);
+      setError(requestError instanceof Error ? requestError.message : "加载失败");
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const startRandom = async () => {
+    await loadRandomMovie(movies, currentMovie?.detailUrl ?? null);
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050506] text-[#EDEDEF]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,#0a0a0f_0%,#050506_50%,#020203_100%)]" />
@@ -136,7 +146,7 @@ export default function Home() {
           </h1>
 
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#8A8F98] md:text-lg">
-            输入豆瓣 ID，读取你的想看列表，点击开始即可随机展示一部电影，包含海报、简介、评分、评分人数、热评和详情链接。
+            输入豆瓣 ID，加载想看列表后会立即随机展示一部电影，也可以继续点击开始随机查看更多，包含海报、简介、评分、评分人数、热评和详情链接。
           </p>
         </section>
 
@@ -192,7 +202,7 @@ export default function Home() {
           <SpotlightCard>
             {!currentMovie ? (
               <div className="flex min-h-[360px] items-center justify-center text-center text-[#8A8F98]">
-                点击「开始随机」后将在这里显示电影详情。
+                加载列表后将在这里显示电影详情。
               </div>
             ) : (
               <article className="grid gap-6 sm:grid-cols-[180px_1fr]">
