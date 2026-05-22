@@ -1,0 +1,29 @@
+[
+  {
+    "status": 200,
+    "progressCount": 8,
+    "partialCount": 5,
+    "finalTitle": "D.P：逃兵追缉令 D.P 개의 날",
+    "failureMessage": "",
+    "fallbackSubjectId": "",
+    "error": ""
+  },
+  {
+    "status": 200,
+    "progressCount": 8,
+    "partialCount": 5,
+    "finalTitle": "阿拉丁 Aladdin",
+    "failureMessage": "",
+    "fallbackSubjectId": "",
+    "error": ""
+  },
+  {
+    "status": 200,
+    "progressCount": 8,
+    "partialCount": 5,
+    "finalTitle": "浪人 Ronin",
+    "failureMessage": "",
+    "fallbackSubjectId": "",
+    "error": ""
+  }
+]

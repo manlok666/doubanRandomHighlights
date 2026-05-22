@@ -162,7 +162,7 @@ export default function Home() {
           </h1>
 
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#8A8F98] md:text-lg">
-            输入豆瓣 ID 后点击开始随机，系统会先随机选择该用户想看列表中的一页，再从该页随机抽取一部电影并展示详情。
+            系统会从该豆瓣ID的想看列表中随机抽取一部电影并展示详情。
           </p>
         </section>
 

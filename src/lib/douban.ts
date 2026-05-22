@@ -2,6 +2,9 @@ import * as cheerio from "cheerio";
 import type { Browser } from "puppeteer-core";
 
 const DOUBAN_HOST = "https://movie.douban.com";
+const THIRD_PARTY_DBTL_HOST = "https://doubaninfo.com";
+const THIRD_PARTY_DBTL_KEY = "7ae897111587da01b17812e8429416e0c9ba6fb06de491f98cbc290d67921b01";
+const THIRD_PARTY_DBTL_LIMIT_PER_MINUTE = 10;
 const MAX_WISHLIST_PAGES = 200;
 const WISHLIST_PAGE_SIZE = 30;
 const RANDOM_WISHLIST_PAGE_MAX_ATTEMPTS = readEnvInt("DOUBAN_RANDOM_PAGE_RETRY_MAX", 4, 1, 10);
@@ -10,6 +13,7 @@ const MOVIE_DETAIL_RETRY_BASE_DELAY_MS = readEnvInt("DOUBAN_RETRY_BASE_DELAY_MS"
 
 type BrowserLike = Browser;
 let browser: BrowserLike | null = null;
+const thirdPartyRequestTimestamps: number[] = [];
 
 export type MovieDetails = {
   title: string;
@@ -138,6 +142,101 @@ function hasAntiBotChallenge(html: string) {
 
 function isAntiBotError(error: unknown) {
   return error instanceof Error && error.message.includes("反爬验证");
+}
+
+function enforceThirdPartyRateLimit() {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+
+  while (thirdPartyRequestTimestamps.length > 0 && now - thirdPartyRequestTimestamps[0] >= windowMs) {
+    thirdPartyRequestTimestamps.shift();
+  }
+
+  if (thirdPartyRequestTimestamps.length >= THIRD_PARTY_DBTL_LIMIT_PER_MINUTE) {
+    throw new Error("第三方接口请求频率超限（每分钟最多 10 次），请稍后重试");
+  }
+
+  thirdPartyRequestTimestamps.push(now);
+}
+
+function containsRateLimitText(input: string) {
+  const text = input.toLowerCase();
+  return (
+    text.includes("limit") ||
+    text.includes("too many") ||
+    text.includes("频率") ||
+    text.includes("上限") ||
+    text.includes("次数")
+  );
+}
+
+async function fetchMovieDetailsFromThirdParty(subjectId: string): Promise<MovieDetails> {
+  enforceThirdPartyRateLimit();
+
+  const apiUrl = new URL("/api/v1_douban.php", THIRD_PARTY_DBTL_HOST);
+  apiUrl.searchParams.set("url", subjectId);
+  apiUrl.searchParams.set("key", THIRD_PARTY_DBTL_KEY);
+
+  const response = await fetch(apiUrl, {
+    method: "GET",
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    },
+    cache: "no-store",
+  });
+
+  const rawText = await response.text();
+  if (!response.ok) {
+    if (response.status === 429 || containsRateLimitText(rawText)) {
+      throw new Error("第三方接口请求频率超限（每分钟最多 10 次），请稍后重试");
+    }
+    throw new Error(`第三方接口请求失败（${response.status}）`);
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawText);
+  } catch {
+    throw new Error("第三方接口返回数据异常，请稍后重试");
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("第三方接口返回数据异常，请稍后重试");
+  }
+
+  const record = payload as Record<string, unknown>;
+  const success = record.success !== false;
+  const errorText = String(record.message ?? record.msg ?? record.error ?? "").trim();
+
+  if (!success) {
+    if (containsRateLimitText(errorText)) {
+      throw new Error("第三方接口请求频率超限（每分钟最多 10 次），请稍后重试");
+    }
+    throw new Error(errorText || "第三方接口返回失败");
+  }
+
+  const detailUrl = toAbsoluteUrl(`/subject/${subjectId}/`);
+  const title = cleanText(String(record.title ?? record.chinese_title ?? ""));
+  const poster = cleanText(String(record.poster ?? record.cover ?? ""));
+  const intro = cleanText(String(record.summary ?? ""));
+  const rating = cleanText(String(record.douban_rating ?? record.douban_rating_average ?? "")) || "暂无评分";
+  const ratingCount =
+    cleanText(String(record.douban_votes ?? record.votes ?? "").replace(/,/g, "")) || "0";
+
+  if (!title) {
+    throw new Error("第三方接口未返回有效电影标题");
+  }
+
+  return {
+    title,
+    detailUrl,
+    poster,
+    intro,
+    rating,
+    ratingCount,
+  };
 }
 
 function assertDoubanPageUsable(html: string, context: "movie" | "wishlist") {
@@ -274,6 +373,10 @@ export async function fetchMovieDetailsByUrl(inputUrl: string) {
       return parseMovieDetails(html, detailUrl);
     } catch (error) {
       if (!isAntiBotError(error) || attempt === MOVIE_DETAIL_MAX_RETRIES - 1) {
+        if (isAntiBotError(error)) {
+          // Fallback to third-party API when Douban anti-bot blocks detail pages.
+          return fetchMovieDetailsFromThirdParty(subjectId);
+        }
         throw error;
       }
       await sleep(getRetryDelay(attempt));
