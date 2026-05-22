@@ -40,6 +40,7 @@ export default function Home() {
   const [loadingMovie, setLoadingMovie] = useState(false);
   const [error, setError] = useState("");
   const [currentMovie, setCurrentMovie] = useState<MovieDetails | null>(null);
+  const [posterLoadFailed, setPosterLoadFailed] = useState(false);
   const [randomMeta, setRandomMeta] = useState<{ randomPage: number; totalPages: number } | null>(
     null,
   );
@@ -62,6 +63,10 @@ export default function Home() {
     return "输入豆瓣 ID 后点击开始随机";
   }, [loadingMovie, progressState, randomMeta]);
 
+  useEffect(() => {
+    setPosterLoadFailed(false);
+  }, [currentMovie?.detailUrl, currentMovie?.poster]);
+
   const startRandom = async () => {
     const trimmedUserId = userId.trim();
     if (!trimmedUserId) {
@@ -73,6 +78,7 @@ export default function Home() {
 
     setLoadingMovie(true);
     setError("");
+    setPosterLoadFailed(false);
     setProgressState({
       progress: 0,
       stage: "准备开始",
@@ -136,6 +142,9 @@ export default function Home() {
       }
     };
   };
+
+  const posterProxyUrl = getPosterProxyUrl(currentMovie?.poster ?? "");
+  const canShowPoster = Boolean(posterProxyUrl) && !posterLoadFailed;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050506] text-[#EDEDEF]">
@@ -228,16 +237,17 @@ export default function Home() {
             ) : (
               <article className="grid gap-6 sm:grid-cols-[180px_1fr]">
                 <div>
-                  {getPosterProxyUrl(currentMovie.poster) ? (
+                  {canShowPoster ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={getPosterProxyUrl(currentMovie.poster)}
+                      src={posterProxyUrl}
                       alt={`${currentMovie.title} 海报`}
                       className="h-65 w-full rounded-xl border border-white/10 object-cover"
+                      onError={() => setPosterLoadFailed(true)}
                     />
                   ) : (
                     <div className="flex h-65 items-center justify-center rounded-xl border border-white/10 bg-white/3 text-sm text-[#8A8F98]">
-                      暂无海报
+                      {posterLoadFailed ? "海报加载失败，已自动降级显示" : "暂无海报"}
                     </div>
                   )}
                 </div>
