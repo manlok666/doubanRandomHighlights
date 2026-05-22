@@ -1,0 +1,59 @@
+{
+  "wishlistStatus": 410,
+  "wishlistBody": "{\"message\":\"该接口已下线，请使用 /api/movie?userId=xxx 进行随机抽取\"}",
+  "randomRuns": [
+    {
+      "status": 200,
+      "title": "陀地驱魔人 陀地驅魔人",
+      "subjectId": "26341750",
+      "randomPage": 109,
+      "totalPages": 109,
+      "imageStatus": 200,
+      "imageType": "image/webp",
+      "message": ""
+    },
+    {
+      "status": 200,
+      "title": "玛丽！玛丽！ Mary! Mary!",
+      "subjectId": "25934246",
+      "randomPage": 28,
+      "totalPages": 109,
+      "imageStatus": 200,
+      "imageType": "image/webp",
+      "message": ""
+    },
+    {
+      "status": 200,
+      "title": "给我翅膀 Donne-moi des ailes",
+      "subjectId": "30410114",
+      "randomPage": 77,
+      "totalPages": 109,
+      "imageStatus": 200,
+      "imageType": "image/webp",
+      "message": ""
+    },
+    {
+      "status": 200,
+      "title": "严肃的月光 Serious Moonlight",
+      "subjectId": "2978184",
+      "randomPage": 45,
+      "totalPages": 109,
+      "imageStatus": 200,
+      "imageType": "image/webp",
+      "message": ""
+    },
+    {
+      "status": 200,
+      "title": "飞鹰艾迪 Eddie the Eagle",
+      "subjectId": "3072064",
+      "randomPage": 103,
+      "totalPages": 109,
+      "imageStatus": 200,
+      "imageType": "image/webp",
+      "message": ""
+    }
+  ],
+  "detailStatus": 200,
+  "detailTitle": "肖申克的救赎 The Shawshank Redemption",
+  "error": ""
+}

@@ -1,17 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SpotlightCard from "@/components/spotlight-card";
-import type { MovieDetails, WishlistMovie } from "@/lib/douban";
+import type { MovieDetails } from "@/lib/douban";
 
-type WishlistResponse = {
-  userId: string;
-  movies: WishlistMovie[];
+type MovieResponse = MovieDetails & {
+  userId?: string;
+  subjectId?: string;
+  randomPage?: number;
+  totalPages?: number;
   message?: string;
 };
 
-type MovieResponse = MovieDetails & {
-  message?: string;
+type ProgressState = {
+  progress: number;
+  stage: string;
+  detail: string;
 };
 
 function getSafeImageUrl(url: string) {
@@ -25,100 +29,112 @@ function getSafeImageUrl(url: string) {
   }
 }
 
-function getRandomMovie(movies: WishlistMovie[], currentUrl: string | null) {
-  if (movies.length <= 1) return movies[0] ?? null;
-  const candidates = movies.filter((movie) => movie.detailUrl !== currentUrl);
-  return candidates[Math.floor(Math.random() * candidates.length)] ?? movies[0];
+function getPosterProxyUrl(rawUrl: string) {
+  const safe = getSafeImageUrl(rawUrl);
+  if (!safe) return "";
+  return `/api/image?url=${encodeURIComponent(safe)}`;
 }
 
 export default function Home() {
   const [userId, setUserId] = useState("");
-  const [movies, setMovies] = useState<WishlistMovie[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
   const [loadingMovie, setLoadingMovie] = useState(false);
   const [error, setError] = useState("");
   const [currentMovie, setCurrentMovie] = useState<MovieDetails | null>(null);
+  const [randomMeta, setRandomMeta] = useState<{ randomPage: number; totalPages: number } | null>(
+    null,
+  );
+  const [progressState, setProgressState] = useState<ProgressState | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const canStart = movies.length > 0 && !loadingMovie;
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    };
+  }, []);
 
   const statusText = useMemo(() => {
-    if (loadingList) return "正在读取豆瓣想看列表...";
+    if (loadingMovie && progressState) {
+      return `${progressState.stage} · ${progressState.progress}%`;
+    }
     if (loadingMovie) return "正在随机抽取电影并加载详情...";
-    if (movies.length > 0) return `已加载 ${movies.length} 部想看电影`;
-    return "输入豆瓣 ID 后点击加载列表";
-  }, [loadingList, loadingMovie, movies.length]);
+    if (randomMeta) return `最近一次来自第 ${randomMeta.randomPage}/${randomMeta.totalPages} 页`;
+    return "输入豆瓣 ID 后点击开始随机";
+  }, [loadingMovie, progressState, randomMeta]);
 
-  const loadRandomMovie = async (
-    movieList: WishlistMovie[],
-    currentUrl: string | null,
-  ) => {
-    const picked = getRandomMovie(movieList, currentUrl);
-    if (!picked) {
-      setError("暂无可抽取的电影");
-      return;
-    }
-
-    setLoadingMovie(true);
-    setError("");
-
-    try {
-      const response = await fetch(
-        `/api/movie?detailUrl=${encodeURIComponent(picked.detailUrl)}`,
-      );
-      const data = (await response.json()) as MovieResponse;
-
-      if (!response.ok) {
-        throw new Error(data.message ?? "加载电影详情失败");
-      }
-
-      setCurrentMovie({
-        ...data,
-        poster: data.poster || picked.poster,
-        intro: data.intro || picked.intro,
-      });
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "抽取失败");
-    } finally {
-      setLoadingMovie(false);
-    }
-  };
-
-  const loadWishlist = async () => {
-    if (!userId.trim()) {
+  const startRandom = async () => {
+    const trimmedUserId = userId.trim();
+    if (!trimmedUserId) {
       setError("请输入豆瓣 ID");
       return;
     }
 
-    setLoadingList(true);
+    if (loadingMovie) return;
+
+    setLoadingMovie(true);
     setError("");
-    setCurrentMovie(null);
+    setProgressState({
+      progress: 0,
+      stage: "准备开始",
+      detail: "正在连接随机抽取进度流...",
+    });
 
-    try {
-      const response = await fetch(`/api/wishlist?userId=${encodeURIComponent(userId.trim())}`);
-      const data = (await response.json()) as WishlistResponse;
+    eventSourceRef.current?.close();
 
-      if (!response.ok) {
-        throw new Error(data.message ?? "加载想看列表失败");
+    const source = new EventSource(`/api/movie/stream?userId=${encodeURIComponent(trimmedUserId)}`);
+    eventSourceRef.current = source;
+    let settled = false;
+
+    source.addEventListener("progress", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as ProgressState;
+      setProgressState(payload);
+    });
+
+    source.addEventListener("result", (event) => {
+      settled = true;
+      const data = JSON.parse((event as MessageEvent<string>).data) as MovieResponse;
+      setCurrentMovie(data);
+      if (typeof data.randomPage === "number" && typeof data.totalPages === "number") {
+        setRandomMeta({ randomPage: data.randomPage, totalPages: data.totalPages });
+      } else {
+        setRandomMeta(null);
       }
+      setProgressState({
+        progress: 100,
+        stage: "完成",
+        detail: `已抽到：${data.title}`,
+      });
+      setLoadingMovie(false);
+      source.close();
+      if (eventSourceRef.current === source) {
+        eventSourceRef.current = null;
+      }
+    });
 
-      setMovies(data.movies);
+    source.addEventListener("failure", (event) => {
+      settled = true;
+      const data = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
+      setError(data.message ?? "抽取失败");
+      setLoadingMovie(false);
+      setProgressState(null);
+      source.close();
+      if (eventSourceRef.current === source) {
+        eventSourceRef.current = null;
+      }
+    });
 
-      if (data.movies.length === 0) {
-        setError("未找到公开的想看电影，或该用户想看列表不可访问");
+    source.onerror = () => {
+      if (settled) {
         return;
       }
-
-      await loadRandomMovie(data.movies, null);
-    } catch (requestError) {
-      setMovies([]);
-      setError(requestError instanceof Error ? requestError.message : "加载失败");
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  const startRandom = async () => {
-    await loadRandomMovie(movies, currentMovie?.detailUrl ?? null);
+      setError("进度连接中断，请重试");
+      setLoadingMovie(false);
+      setProgressState(null);
+      source.close();
+      if (eventSourceRef.current === source) {
+        eventSourceRef.current = null;
+      }
+    };
   };
 
   return (
@@ -138,15 +154,15 @@ export default function Home() {
             DOUBAN RANDOM HIGHLIGHTS
           </p>
 
-          <h1 className="text-4xl font-semibold leading-tight tracking-[-0.03em] text-transparent md:text-6xl lg:text-7xl bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text">
+          <h1 className="bg-linear-to-b from-white via-white/95 to-white/70 bg-clip-text text-4xl font-semibold leading-tight tracking-[-0.03em] text-transparent md:text-6xl lg:text-7xl">
             随机抽取你的
-            <span className="ml-2 inline-block animate-shimmer bg-[length:200%_100%] bg-gradient-to-r from-[#5E6AD2] via-indigo-400 to-[#5E6AD2] bg-clip-text text-transparent">
+            <span className="ml-2 inline-block animate-shimmer bg-size-[200%_100%] bg-linear-to-r from-[#5E6AD2] via-indigo-400 to-[#5E6AD2] bg-clip-text text-transparent">
               豆瓣想看电影
             </span>
           </h1>
 
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#8A8F98] md:text-lg">
-            输入豆瓣 ID，加载想看列表后会立即随机展示一部电影，也可以继续点击开始随机查看更多，包含海报、简介、评分、评分人数、热评和详情链接。
+            输入豆瓣 ID 后点击开始随机，系统会先随机选择该用户想看列表中的一页，再从该页随机抽取一部电影并展示详情。
           </p>
         </section>
 
@@ -167,25 +183,30 @@ export default function Home() {
                 />
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={loadWishlist}
-                  disabled={loadingList || loadingMovie}
-                  className="h-11 rounded-lg bg-[#5E6AD2] px-4 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(94,106,210,0.5),0_4px_12px_rgba(94,106,210,0.3),inset_0_1px_0_0_rgba(255,255,255,0.2)] transition-all duration-200 ease-out hover:bg-[#6872D9] hover:shadow-[0_0_0_1px_rgba(94,106,210,0.6),0_8px_24px_rgba(94,106,210,0.4),inset_0_1px_0_0_rgba(255,255,255,0.24)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loadingList ? "加载中..." : "加载列表"}
-                </button>
+              <button
+                type="button"
+                onClick={startRandom}
+                disabled={loadingMovie}
+                className="h-11 w-full rounded-lg bg-[#5E6AD2] px-4 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(94,106,210,0.5),0_4px_12px_rgba(94,106,210,0.3),inset_0_1px_0_0_rgba(255,255,255,0.2)] transition-all duration-200 ease-out hover:bg-[#6872D9] hover:shadow-[0_0_0_1px_rgba(94,106,210,0.6),0_8px_24px_rgba(94,106,210,0.4),inset_0_1px_0_0_rgba(255,255,255,0.24)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingMovie ? "抽取中..." : "开始随机"}
+              </button>
 
-                <button
-                  type="button"
-                  onClick={startRandom}
-                  disabled={!canStart}
-                  className="h-11 rounded-lg bg-white/[0.05] px-4 text-sm font-medium text-[#EDEDEF] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] transition-all duration-200 ease-out hover:bg-white/[0.08] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loadingMovie ? "抽取中..." : "开始随机"}
-                </button>
-              </div>
+              {progressState ? (
+                <div className="space-y-3 rounded-xl border border-white/10 bg-white/4 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium text-[#EDEDEF]">{progressState.stage}</span>
+                    <span className="font-mono text-white/60">{progressState.progress}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-linear-to-r from-[#5E6AD2] via-indigo-400 to-cyan-400 transition-[width] duration-300 ease-out"
+                      style={{ width: `${progressState.progress}%` }}
+                    />
+                  </div>
+                  <p className="text-sm leading-relaxed text-[#8A8F98]">{progressState.detail}</p>
+                </div>
+              ) : null}
 
               <p className="text-sm text-[#8A8F98]" aria-live="polite">
                 {statusText}
@@ -201,21 +222,21 @@ export default function Home() {
 
           <SpotlightCard>
             {!currentMovie ? (
-              <div className="flex min-h-[360px] items-center justify-center text-center text-[#8A8F98]">
-                加载列表后将在这里显示电影详情。
+              <div className="flex min-h-90 items-center justify-center text-center text-[#8A8F98]">
+                点击开始随机后将在这里显示电影详情。
               </div>
             ) : (
               <article className="grid gap-6 sm:grid-cols-[180px_1fr]">
                 <div>
-                  {getSafeImageUrl(currentMovie.poster) ? (
+                  {getPosterProxyUrl(currentMovie.poster) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={getSafeImageUrl(currentMovie.poster)}
+                      src={getPosterProxyUrl(currentMovie.poster)}
                       alt={`${currentMovie.title} 海报`}
-                      className="h-[260px] w-full rounded-xl border border-white/10 object-cover"
+                      className="h-65 w-full rounded-xl border border-white/10 object-cover"
                     />
                   ) : (
-                    <div className="flex h-[260px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-sm text-[#8A8F98]">
+                    <div className="flex h-65 items-center justify-center rounded-xl border border-white/10 bg-white/3 text-sm text-[#8A8F98]">
                       暂无海报
                     </div>
                   )}
@@ -230,23 +251,19 @@ export default function Home() {
                     <span className="rounded-full border border-[#5E6AD2]/30 bg-[#5E6AD2]/15 px-3 py-1">
                       豆瓣评分：{currentMovie.rating}
                     </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1">
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                       评分人数：{currentMovie.ratingCount}
                     </span>
                   </div>
 
                   <p className="text-sm leading-relaxed text-[#8A8F98]">{currentMovie.intro || "暂无简介"}</p>
 
-                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-                    <p className="mb-2 text-xs font-mono tracking-widest text-white/60">热评</p>
-                    <p className="text-sm leading-relaxed text-[#EDEDEF]">{currentMovie.hotReview}</p>
-                  </div>
 
                   <a
                     href={currentMovie.detailUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg bg-white/[0.05] px-4 py-2 text-sm text-[#EDEDEF] transition-all duration-200 hover:bg-white/[0.08] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/50 focus:ring-offset-2 focus:ring-offset-[#050506]"
+                    className="inline-flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm text-[#EDEDEF] transition-all duration-200 hover:bg-white/8 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/50 focus:ring-offset-2 focus:ring-offset-[#050506]"
                   >
                     查看豆瓣详情 →
                   </a>
