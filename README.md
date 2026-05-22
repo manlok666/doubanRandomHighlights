@@ -60,3 +60,33 @@ set DOUBAN_RETRY_BASE_DELAY_MS=1200
 npm run dev
 ```
 
+## 部署到 Vercel（推荐）
+
+本项目包含服务端抓取接口，不适合部署到 GitHub Pages。推荐直接部署到 Vercel。
+
+### 一次性准备
+
+```bash
+npm install
+npm run build
+```
+
+### 首次部署
+
+```bash
+npm i -g vercel
+vercel
+```
+
+### 生产发布
+
+```bash
+vercel --prod
+```
+
+说明：
+
+- 生产环境自动使用 `@sparticuz/chromium + puppeteer-core` 适配 Serverless
+- 本地开发自动使用 `puppeteer`（完整浏览器）
+- `vercel.json` 已配置随机相关 API 的 `maxDuration` 为 `60s`
+

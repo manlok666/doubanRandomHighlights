@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import puppeteer from "puppeteer";
+import type { Browser } from "puppeteer-core";
 
 const DOUBAN_HOST = "https://movie.douban.com";
 const MAX_WISHLIST_PAGES = 200;
@@ -8,7 +8,7 @@ const RANDOM_WISHLIST_PAGE_MAX_ATTEMPTS = readEnvInt("DOUBAN_RANDOM_PAGE_RETRY_M
 const MOVIE_DETAIL_MAX_RETRIES = readEnvInt("DOUBAN_RETRY_MAX", 3, 1, 8);
 const MOVIE_DETAIL_RETRY_BASE_DELAY_MS = readEnvInt("DOUBAN_RETRY_BASE_DELAY_MS", 800, 100, 10000);
 
-type BrowserLike = Awaited<ReturnType<typeof puppeteer.launch>>;
+type BrowserLike = Browser;
 let browser: BrowserLike | null = null;
 
 export type MovieDetails = {
@@ -58,10 +58,25 @@ function getRetryDelay(attempt: number) {
 
 async function getBrowser() {
   if (!browser) {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
+    const commonArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
+    const isServerless = process.env.VERCEL === "1" || Boolean(process.env.AWS_REGION);
+
+    if (isServerless) {
+      const chromium = (await import("@sparticuz/chromium")).default;
+      const puppeteerCore = (await import("puppeteer-core")).default;
+
+      browser = await puppeteerCore.launch({
+        headless: true,
+        executablePath: await chromium.executablePath(),
+        args: [...chromium.args, ...commonArgs],
+      });
+    } else {
+      const puppeteer = (await import("puppeteer")).default;
+      browser = await puppeteer.launch({
+        headless: true,
+        args: commonArgs,
+      });
+    }
   }
   return browser;
 }
