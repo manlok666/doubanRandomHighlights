@@ -147,7 +147,7 @@ export default function Home() {
   const canShowPoster = Boolean(posterProxyUrl) && !posterLoadFailed;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050506] text-[#EDEDEF]">
+    <div className="relative h-screen overflow-hidden bg-[#050506] text-[#EDEDEF]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,#0a0a0f_0%,#050506_50%,#020203_100%)]" />
       <div className="noise-layer pointer-events-none absolute inset-0" />
       <div className="grid-layer pointer-events-none absolute inset-0" />
@@ -157,9 +157,9 @@ export default function Home() {
       <div className="blob blob-tertiary" />
       <div className="blob blob-bottom" />
 
-      <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-16 md:px-8 md:py-24 lg:py-32">
+      <main className="relative z-10 mx-auto flex h-full w-full max-w-6xl flex-col justify-center px-6 py-8 md:px-8 md:py-12">
         <section className="mx-auto w-full max-w-4xl">
-          <p className="mb-4 font-mono text-xs tracking-widest text-white/60">
+          <p className="mb-3 font-mono text-xs tracking-widest text-white/60">
             DOUBAN RANDOM HIGHLIGHTS
           </p>
 
@@ -175,7 +175,7 @@ export default function Home() {
           </p>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
+        <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
           <SpotlightCard>
             <div className="space-y-6">
               <div>
@@ -268,7 +268,6 @@ export default function Home() {
 
                   <p className="text-sm leading-relaxed text-[#8A8F98]">{currentMovie.intro || "暂无简介"}</p>
 
-
                   <a
                     href={currentMovie.detailUrl}
                     target="_blank"
@@ -282,6 +281,20 @@ export default function Home() {
             )}
           </SpotlightCard>
         </section>
+
+        <footer className="mt-6 border-t border-white/6 pt-5 text-center">
+          <p className="text-sm text-[#8A8F98]">
+            Made by{" "}
+            <a
+              href="https://github.com/manlok666"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#EDEDEF] transition-colors duration-200 hover:text-[#5E6AD2] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/50 focus:ring-offset-2 focus:ring-offset-[#050506]"
+            >
+              MANLOK
+            </a>
+          </p>
+        </footer>
       </main>
     </div>
   );
